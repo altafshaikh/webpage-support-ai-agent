@@ -116,7 +116,56 @@ async function WebScraper(url) {
   return { pageBody, pageHead, internalLinks, externalLinks, links };
 }
 
+async function chat(query = "") {
+  const queryEmbedding = await generateVectorEmbeddings(query);
+
+  const pageCollection = await chromaClient.getOrCreateCollection({
+    name: collectionName,
+    embeddingFunction: null,
+  });
+
+  const results = await pageCollection.query({
+    queryEmbeddings: [queryEmbedding],
+    nResults: 1,
+  });
+
+  const body = results.metadatas[0]
+    .map((metadata) => metadata.body)
+    .filter((e) => e.trim() !== "" && !!e);
+  const head = results.metadatas[0]
+    .map((metadata) => metadata.head)
+    .filter((e) => e.trim() !== "" && !!e);
+  const url = results.metadatas[0]
+    .map((metadata) => metadata.url)
+    .filter((e) => e.trim() !== "" && !!e);
+
+  const reply = await llmClient.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content: `You are a helpful AI Support Agent that can answer questions about given webpage`,
+      },
+      {
+        role: "user",
+        content: `
+        Question: ${query}\n\n
+        Webpage: ${body.join(", ")}
+        URL: ${url.join(", ")} 
+        Head: ${head.join(", ")}
+        `,
+      },
+    ],
+  });
+
+  console.log("🤖", reply.choices[0].message.content);
+  return reply.choices[0].message.content;
+}
+
 async function main() {
+  //   return await chat("Who is altaf?");
+  //   return await chat("what is teachmebro");
+  return await chat("what are the workshops taken by altaf");
   const urls = ["https://altafshaikh.vercel.app/"];
 
   for (const url of urls) {
