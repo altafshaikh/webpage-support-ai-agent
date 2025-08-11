@@ -1,0 +1,8 @@
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    volumes:
+      - ./chromadb:/chroma/chroma
+    ports:
+      - "8000:8000"
