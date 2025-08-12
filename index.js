@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import { ChromaClient } from "chromadb";
+import readline from "readline";
 
 dotenv.config();
 
@@ -62,16 +63,17 @@ async function injestPage(url) {
   const { pageBody, pageHead, internalLinks, externalLinks, links } =
     await WebScraper(url);
 
-  console.info(`🔗 Internal links: ${internalLinks}`);
+  console.info(`🔗 Internal links: ${internalLinks || []}`);
 
-  const headEmbedding = await generateVectorEmbeddings(pageHead);
-  await insertPage(headEmbedding, url, "", pageHead);
-
-  for (const chunk of chunkText(pageBody, 500)) {
+  for (const chunk of chunkText(pageBody, 1000)) {
     const embedding = await generateVectorEmbeddings(chunk);
     await insertPage(embedding, url, chunk, pageHead, pageBody);
   }
 
+  const headEmbedding = await generateVectorEmbeddings(pageHead);
+  await insertPage(headEmbedding, url, "", pageHead);
+
+  // Do not injest internal links recursively for now
   //   for (const link of internalLinks) {
   //     const _url = `${url}${link}`;
   //     await injestPage(_url);
@@ -103,7 +105,13 @@ async function WebScraper(url) {
   const uniqueLinks = new Set();
   $("a").each((i, link) => {
     const href = $(link).attr("href");
-    if (!href || href.includes("@") || href == "#" || href.startsWith("#")) {
+    if (
+      !href ||
+      href.includes("@") ||
+      href == "#" ||
+      href.startsWith("#") ||
+      href == "/"
+    ) {
       return;
     }
     uniqueLinks.add(href);
@@ -162,14 +170,28 @@ async function chat(query = "") {
   return reply.choices[0].message.content;
 }
 
-async function main() {
-  //   return await chat("Who is altaf?");
-  //   return await chat("what is teachmebro");
-  return await chat("what are the workshops taken by altaf");
-  const urls = ["https://altafshaikh.vercel.app/"];
+const userInput = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
-  for (const url of urls) {
-    await injestPage(url);
+async function main() {
+  // Example Usage for injesting vector embeddings: node index.js true
+  const isInjest = process.argv.slice(2)[0] !== "false";
+  if (isInjest) {
+    const urls = ["https://altafshaikh.vercel.app/"];
+
+    for (const url of urls) {
+      await injestPage(url);
+    }
+    console.info("🤖: Goodbye!");
+    process.exit(0);
+  } else {
+    // Example Usage for querying: node index.js false
+    userInput.question("🤖: How can I help you? \n>> ", async (query) => {
+      await chat(query);
+      return userInput.close();
+    });
   }
 }
 
